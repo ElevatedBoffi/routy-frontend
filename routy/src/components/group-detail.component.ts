@@ -1,5 +1,5 @@
 
-import { Component, inject, signal, effect, ElementRef, ViewChild, OnDestroy } from '@angular/core';
+import { Component, inject, signal, effect, ElementRef, ViewChild, OnDestroy, computed } from '@angular/core';
 import { DataService, Group, Post } from '../services/data.service';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
@@ -94,8 +94,22 @@ export class GroupDetailComponent implements OnDestroy {
   dataService = inject(DataService);
   route = inject(ActivatedRoute);
 
-  group = signal<Group | undefined>(undefined);
-  itineraryPosts = signal<Post[]>([]);
+  groupId = signal<string | null>(null);
+
+  // Computed: Re-evaluates when myGroups loads data OR groupId changes
+  group = computed(() => {
+    return this.dataService.myGroups().find(g => g.id === this.groupId());
+  });
+
+  // Computed: Derives itinerary from the found group + global posts list
+  itineraryPosts = computed(() => {
+    const g = this.group();
+    if (!g || !g.itinerary_posts) return [];
+    
+    return (g.itinerary_posts || [])
+      .map(pid => this.dataService.posts().find(p => p.id === pid))
+      .filter((p): p is Post => !!p);
+  });
   
   // Map References
   @ViewChild('mapContainer') mapContainer!: ElementRef;
@@ -103,20 +117,7 @@ export class GroupDetailComponent implements OnDestroy {
 
   constructor() {
     this.route.params.subscribe(params => {
-      const id = params['id'];
-      if (id) {
-        const foundGroup = this.dataService.myGroups().find(g => g.id === id);
-        if (foundGroup) {
-          this.group.set(foundGroup);
-          
-          // Hydrate itinerary
-          const posts = (foundGroup.itinerary_posts || [])
-            .map(pid => this.dataService.posts().find(p => p.id === pid))
-            .filter((p): p is Post => !!p);
-            
-          this.itineraryPosts.set(posts);
-        }
-      }
+      this.groupId.set(params['id']);
     });
 
     // Effect to initialize/update map when view is ready and data exists
@@ -139,6 +140,8 @@ export class GroupDetailComponent implements OnDestroy {
     const center = posts.length > 0 ? [posts[0].lat, posts[0].lng] : defaultCenter;
 
     // Initialize Leaflet
+    if (!this.mapContainer) return;
+    
     this.map = L.map(this.mapContainer.nativeElement).setView(center, 13);
 
     // Add OpenStreetMap Tiles
