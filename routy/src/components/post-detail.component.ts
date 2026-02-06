@@ -1,6 +1,6 @@
 
-import { Component, inject, signal, effect } from '@angular/core';
-import { DataService, Post } from '../services/data.service';
+import { Component, inject, signal, computed, effect } from '@angular/core';
+import { DataService } from '../services/data.service';
 import { AiService } from '../services/ai.service';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 
@@ -37,10 +37,10 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
           <div class="flex items-center justify-between mb-8">
             <div class="flex items-center gap-3">
               <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center font-bold text-lg text-slate-600">
-                {{ p.author_initial }}
+                {{ p.profiles?.username?.charAt(0) || '?' }}
               </div>
               <div>
-                <h3 class="font-bold text-slate-900">{{ p.author_name }}</h3>
+                <h3 class="font-bold text-slate-900">{{ p.profiles?.username || 'Unknown' }}</h3>
                 <p class="text-xs text-slate-500">Posted just now</p>
               </div>
             </div>
@@ -54,7 +54,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
           <!-- The Text -->
           <div class="prose prose-slate max-w-none mb-8">
              <p class="text-lg leading-relaxed text-slate-700">
-               {{ currentText() }}
+               {{ currentText() || p.content }}
              </p>
           </div>
           
@@ -102,20 +102,21 @@ export class PostDetailComponent {
   aiService = inject(AiService);
   route = inject(ActivatedRoute);
 
-  post = signal<Post | undefined>(undefined);
+  postId = signal<string | null>(null);
+  
+  // Computed Signal: Automatically updates when either the postId changes OR dataService.posts() loads new data
+  post = computed(() => {
+    const id = this.postId();
+    return this.dataService.posts().find(p => p.id === id);
+  });
+  
   currentText = signal('');
 
   constructor() {
     this.route.params.subscribe(params => {
-      const id = params['id'];
-      if (id) {
-         // In real app, this would be an async fetch
-         const found = this.dataService.posts().find(p => p.id === id);
-         if (found) {
-            this.post.set(found);
-            this.currentText.set(found.content);
-         }
-      }
+      this.postId.set(params['id']);
+      // Reset translation on navigation
+      this.currentText.set('');
     });
   }
 
