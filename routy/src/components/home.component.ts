@@ -2,14 +2,13 @@
 import { Component, inject, signal, computed, ViewChild, ElementRef, effect, OnDestroy } from '@angular/core';
 import { DataService, Post } from '../services/data.service';
 import { RouterLink } from '@angular/router';
-import { DatePipe } from '@angular/common';
 
 declare const L: any;
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [RouterLink, DatePipe],
+  imports: [RouterLink],
   template: `
     <div class="h-[calc(100vh-64px)] flex flex-col md:flex-row overflow-hidden relative">
       
@@ -19,7 +18,7 @@ declare const L: any;
         
         <div class="absolute top-4 left-4 z-[500] flex flex-col gap-2">
            <button (click)="locateUser()" class="bg-white p-2.5 rounded-full shadow-lg text-slate-700 hover:text-teal-600 transition-all hover:scale-105" title="Near Me">
-             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><crosshair cx="12" cy="12" r="10"/><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="3"/></svg>
+             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="3"/></svg>
            </button>
            <button (click)="resetMap()" class="bg-white p-2.5 rounded-full shadow-lg text-slate-700 hover:text-teal-600 transition-all hover:scale-105" title="Reset View">
              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
@@ -261,7 +260,33 @@ export class HomeComponent implements OnDestroy {
   }
 
   searchInBounds() { if (this.mainMap) this.mapBounds.set(this.mainMap.getBounds()); }
-  locateUser() { /* Same as before */ }
+  locateUser() { 
+      if (!navigator.geolocation) {
+          alert("Geolocation is not supported by your browser");
+          return;
+      }
+      navigator.geolocation.getCurrentPosition((position) => {
+          const lat = position.coords.latitude;
+          const lng = position.coords.longitude;
+          
+          // Remove existing user circle if any
+          if (this.userCircle && this.mainMap) {
+              this.mainMap.removeLayer(this.userCircle);
+          }
+
+          if (this.mainMap) {
+              this.mainMap.setView([lat, lng], 13);
+              this.userCircle = L.circle([lat, lng], {
+                  color: '#0d9488', // teal-600
+                  fillColor: '#2dd4bf', // teal-400
+                  fillOpacity: 0.2,
+                  radius: 1000 // meters
+              }).addTo(this.mainMap);
+          }
+      }, () => {
+          alert("Unable to retrieve your location");
+      });
+  }
   resetMap() { this.mainMap.setView([41.9028, 12.4964], 4); this.mapBounds.set(null); }
 
   openCreateModal() { this.showCreateModal.set(true); setTimeout(() => this.initPickerMap(), 200); }
@@ -287,8 +312,13 @@ export class HomeComponent implements OnDestroy {
   async onPostImageSelected(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files[0]) {
-      const url = await this.dataService.uploadImage(input.files[0]);
-      this.newPostImage.set(url);
+      try {
+        const url = await this.dataService.uploadImage(input.files[0]);
+        this.newPostImage.set(url);
+      } catch (err) {
+        console.error("Upload error", err);
+        alert("Upload failed. Ensure you are logged in and bucket exists.");
+      }
     }
   }
 
